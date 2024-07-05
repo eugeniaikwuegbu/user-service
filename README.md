@@ -66,7 +66,7 @@ Sample env values are in the `.env.sample` file
 
 https://user-service1-1f3a6f507c56.herokuapp.com/
 
-## Swaggar Documentation
+## Swagger Documentation
 
 https://user-service1-1f3a6f507c56.herokuapp.com/users-service/docs
 
