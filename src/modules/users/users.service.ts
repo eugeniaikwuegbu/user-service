@@ -1,7 +1,7 @@
 import {
+  ConflictException,
   Injectable,
   NotFoundException,
-  UnprocessableEntityException,
 } from '@nestjs/common';
 import { NotificationService } from '../../modules/notifications/notification.service';
 import { UserAvatar } from '../user-avatar/entities/user-avatar.entity';
@@ -63,7 +63,7 @@ export class UsersService {
     });
 
     if (userExists) {
-      throw new UnprocessableEntityException('Account already exists.');
+      throw new ConflictException('Account already exists.');
     }
   }
 
