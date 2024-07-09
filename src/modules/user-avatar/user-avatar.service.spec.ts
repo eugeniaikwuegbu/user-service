@@ -1,20 +1,33 @@
-import { ConflictException, NotFoundException } from '@nestjs/common';
 import { getModelToken } from '@nestjs/mongoose';
 import { Test, TestingModule } from '@nestjs/testing';
 import * as fs from 'fs';
 import { join } from 'path';
 import SecurityUtil from '../../utils/security.util';
-import { User } from '../users/entities/user.entity';
+import { Types } from 'mongoose';
 import { UserAvatar } from './entities/user-avatar.entity';
 import { UserAvatarRepository } from './repository/user-avatar.repository';
 import { UserAvatarService } from './user-avatar.service';
+import RequestUtil from '../../utils/request.util';
+import { HttpException, HttpStatus, NotFoundException } from '@nestjs/common';
 
 jest.mock('fs');
 jest.mock('../../utils/security.util');
+jest.mock('../../utils/request.util');
+(SecurityUtil.randomInt as jest.Mock).mockReturnValue('123453425362736');
+
+const mockedHash = '123453425362736';
+const userId = '1';
+const mockUserAvatar = {
+  _id: expect.any(Types.ObjectId),
+  userId,
+  filePath: 'user/dist/avatars/1.png',
+  fileBase64: 'hiwofhnoifkewopl',
+  hash: mockedHash,
+};
 
 describe('UserAvatarService', () => {
   let service: UserAvatarService;
-  let userAvatarRepository;
+  let userAvatarRepository: UserAvatarRepository;
 
   const mockUserAvatarRepository = {
     findOne: jest.fn(),
@@ -43,186 +56,174 @@ describe('UserAvatarService', () => {
   });
 
   describe('getUserAvatar', () => {
-    it('should return user avatar when user exists', async () => {
-      const userId = '66880c45f1a095dbb75a2341';
-      const userAvatar = { fileBase64: 'base64string' };
+    it('should return the avatar from the database if it exists', async () => {
+      const mockAvatar = { userId, fileBase64: 'e7q097r9820378' };
 
-      mockUserAvatarRepository.findOne.mockResolvedValue(userAvatar);
+      (userAvatarRepository.findOne as jest.Mock).mockResolvedValue(mockAvatar);
 
       const result = await service.getUserAvatar(userId);
-      expect(result).toEqual({ fileBase64: userAvatar.fileBase64 });
-      expect(userAvatarRepository.findOne).toHaveBeenCalledWith({
-        user: userId,
-      });
+
+      expect(userAvatarRepository.findOne).toHaveBeenCalledWith({ userId });
+      expect(result).toEqual('e7q097r9820378');
     });
 
-    it('should throw NotFoundException when user does not exist', async () => {
-      const userId = '66880c45f1a095dbb75a2341';
+    it('should fetch, save, and return base64-encoded avatar if not found in the database', async () => {
+      const userId = '2';
+      const avatarUrl = `https://reqres.in/img/faces/${userId}-image.jpg`;
+      const imageBuffer = Buffer.from('image-data');
+      const mockFilePath = join(
+        __dirname,
+        '..',
+        '..',
+        'avatars',
+        `${userId}.png`,
+      );
+      const mockAvatar = {
+        _id: expect.any(Types.ObjectId),
+        userId,
+        hash: mockedHash,
+        filePath: mockFilePath,
+        fileBase64: imageBuffer.toString('base64'),
+      };
 
-      mockUserAvatarRepository.findOne.mockResolvedValue(null);
+      (userAvatarRepository.findOne as jest.Mock).mockResolvedValue(null);
+      (RequestUtil.makeGetRequest as jest.Mock).mockResolvedValue({
+        data: imageBuffer,
+      });
+
+      (fs.writeFileSync as jest.Mock).mockReturnValue(undefined);
+      (userAvatarRepository.create as jest.Mock).mockResolvedValue(mockAvatar);
+
+      const result = await service.getUserAvatar(userId);
+
+      expect(userAvatarRepository.findOne).toHaveBeenCalledWith({ userId });
+      expect(RequestUtil.makeGetRequest).toHaveBeenCalledWith(avatarUrl, {
+        responseType: 'arraybuffer',
+      });
+      expect(SecurityUtil.randomInt).toHaveBeenCalledWith(15);
+      expect(fs.writeFileSync).toHaveBeenCalledWith(mockFilePath, imageBuffer);
+      expect(userAvatarRepository.create).toHaveBeenCalledWith(mockAvatar);
+      expect(result).toEqual(mockAvatar.fileBase64);
+    });
+
+    it('should throw an error if fetching the image fails', async () => {
+      const userId = '1';
+
+      (userAvatarRepository.findOne as jest.Mock).mockResolvedValue(null);
+      (RequestUtil.makeGetRequest as jest.Mock).mockRejectedValue(
+        new Error('Failed to fetch image'),
+      );
 
       await expect(service.getUserAvatar(userId)).rejects.toThrow(
-        NotFoundException,
+        'Failed to fetch image',
       );
-      expect(userAvatarRepository.findOne).toHaveBeenCalledWith({
-        user: userId,
-      });
     });
 
-    it('should throw NotFoundException with correct message when user does not exist', async () => {
-      const userId = '6688082b24439dac4526ec15';
+    describe('private methods', () => {
+      it('computeHash should compute the correct hash', () => {
+        expect(SecurityUtil.randomInt).toHaveBeenCalledWith(15);
 
-      mockUserAvatarRepository.findOne.mockResolvedValue(null);
+        const value = service['computeHash']();
 
-      try {
-        await service.getUserAvatar(userId);
-      } catch (e) {
-        expect(e).toBeInstanceOf(NotFoundException);
-        expect(e.message).toBe('User Avatar not found');
-      }
-      expect(userAvatarRepository.findOne).toHaveBeenCalledWith({
-        user: userId,
+        expect(SecurityUtil.randomInt).toHaveBeenCalledWith(15);
+        expect(value).toEqual(mockedHash);
+      });
+
+      it('saveImageToFileSystem should save the image and return the file path', async () => {
+        const userId = '1';
+        const imageBuffer = Buffer.from('imageData');
+        const expectedFilePath = join(
+          __dirname,
+          '..',
+          '..',
+          'avatars',
+          `${userId}.png`,
+        );
+
+        (fs.writeFileSync as jest.Mock).mockImplementation(() => {});
+
+        const result = await service['saveImageToFileSystem'](
+          userId,
+          imageBuffer,
+        );
+
+        expect(fs.writeFileSync).toHaveBeenCalledWith(
+          expectedFilePath,
+          imageBuffer,
+        );
+        expect(result).toEqual(expectedFilePath);
+      });
+
+      it('fetchImage should fetch the image from the URL', async () => {
+        const url = 'http://example.com/image.png';
+        const mockImageBuffer = Buffer.from('imageData');
+
+        (RequestUtil.makeGetRequest as jest.Mock).mockResolvedValue({
+          data: mockImageBuffer,
+        });
+
+        const result = await service['fetchImage'](url);
+
+        expect(RequestUtil.makeGetRequest).toHaveBeenCalledWith(url, {
+          responseType: 'arraybuffer',
+        });
+        expect(result).toEqual(mockImageBuffer);
       });
     });
   });
 
   describe('deleteUserAvatar', () => {
-    it('should delete user avatar successfully', async () => {
-      const userId = '6688082b24439dac4526ec15';
-      const userAvatar = { file: { path: 'path/to/file' }, user: userId };
-      const deletedAvatar = { user: userId };
+    it('should delete the file and remove the entry from the database', async () => {
+      const mockDeletedUserAvatar = { userId, filePath: 'path/to/file' };
 
-      mockUserAvatarRepository.findOne.mockResolvedValue(userAvatar);
-      mockUserAvatarRepository.findOneAndDelete.mockResolvedValue(
-        deletedAvatar,
+      jest
+        .spyOn(service, 'getUserAvatarOrThrow')
+        .mockResolvedValue(mockUserAvatar);
+      (fs.unlinkSync as jest.Mock).mockImplementation(() => {});
+      (userAvatarRepository.findOneAndDelete as jest.Mock).mockResolvedValue(
+        mockDeletedUserAvatar,
       );
-      jest.spyOn(fs, 'unlinkSync').mockImplementation(() => {});
 
       const result = await service.deleteUserAvatar(userId);
 
-      expect(result).toEqual(deletedAvatar);
-      expect(userAvatarRepository.findOne).toHaveBeenCalledWith({
-        user: userId,
-      });
-      expect(fs.unlinkSync).toHaveBeenCalledWith(userAvatar.file.path);
+      expect(service.getUserAvatarOrThrow).toHaveBeenCalledWith(userId);
+      expect(fs.unlinkSync).toHaveBeenCalledWith(mockUserAvatar.filePath);
       expect(userAvatarRepository.findOneAndDelete).toHaveBeenCalledWith({
-        user: userId,
+        userId,
       });
+      expect(result).toEqual(mockDeletedUserAvatar);
     });
 
-    it('should throw NotFoundException when user avatar does not exist', async () => {
-      const userId = '6688082b24439dac4526ec15';
-
-      mockUserAvatarRepository.findOne.mockResolvedValue(null);
+    it('should throw NotFoundException when avatar with Id does not exist in the database', async () => {
+      mockUserAvatarRepository.findOne.mockResolvedValueOnce(null);
+      jest
+        .spyOn(service, 'getUserAvatarOrThrow')
+        .mockRejectedValue(new NotFoundException('User Avatar not found'));
 
       await expect(service.deleteUserAvatar(userId)).rejects.toThrow(
         NotFoundException,
       );
       expect(userAvatarRepository.findOne).toHaveBeenCalledWith({
-        user: userId,
+        userId,
       });
     });
 
-    it('should handle file deletion error', async () => {
-      const userId = '6688082b24439dac4526ec15';
-      const userAvatar = { file: { path: 'path/to/file' }, user: userId };
+    it('should throw an error if file deletion fails', async () => {
+      const fileDeletionError = new Error('File deletion failed');
 
-      mockUserAvatarRepository.findOne.mockResolvedValue(userAvatar);
-      jest.spyOn(fs, 'unlinkSync').mockImplementation(() => {
-        throw new Error('File deletion error');
+      jest
+        .spyOn(service, 'getUserAvatarOrThrow')
+        .mockResolvedValue(mockUserAvatar);
+      (fs.unlinkSync as jest.Mock).mockImplementation(() => {
+        throw fileDeletionError;
       });
 
       await expect(service.deleteUserAvatar(userId)).rejects.toThrow(
-        'File deletion error',
-      );
-      expect(userAvatarRepository.findOne).toHaveBeenCalledWith({
-        user: userId,
-      });
-      expect(fs.unlinkSync).toHaveBeenCalledWith(userAvatar.file.path);
-    });
-  });
-
-  describe('saveFile', () => {
-    it('should save the file successfully', async () => {
-      const file: Express.Multer.File = {
-        originalname: 'avatar.png',
-        buffer: Buffer.from('file content'),
-      } as any;
-      const user = { _id: '6688082b24439dac4526ec15' } as unknown as User;
-      const filePath = join(
-        __dirname,
-        '..',
-        '..',
-        'uploads',
-        file.originalname,
-      );
-      const hash = '123456473827364';
-      const base64 = 'base64string';
-
-      mockUserAvatarRepository.findOne.mockResolvedValue(null);
-      jest.spyOn(fs, 'writeFileSync').mockImplementation(() => {});
-      jest.spyOn(SecurityUtil, 'randomInt').mockReturnValue(parseInt(hash));
-      jest.spyOn(SecurityUtil, 'toBase64').mockReturnValue(base64);
-      mockUserAvatarRepository.create.mockResolvedValue({});
-
-      const result = await service.saveFile(file, user);
-
-      expect(result).toEqual({ base64 });
-      expect(userAvatarRepository.findOne).toHaveBeenCalledWith({ user });
-      expect(fs.writeFileSync).toHaveBeenCalledWith(filePath, file.buffer);
-      expect(SecurityUtil.randomInt).toHaveBeenCalledWith(15);
-      expect(SecurityUtil.toBase64).toHaveBeenCalledWith(JSON.stringify(file));
-
-      expect(userAvatarRepository.create).toHaveBeenCalledWith(
-        expect.objectContaining({
-          user,
-          file,
-          hash,
-          fileBase64: base64,
-        }),
-      );
-    });
-
-    it('should throw ConflictException if user avatar already exists', async () => {
-      const file: Express.Multer.File = {
-        originalname: 'avatar.png',
-        buffer: Buffer.from('file content'),
-      } as any;
-      const user = { _id: '6688082b24439dac4526ec15' } as unknown as User;
-
-      mockUserAvatarRepository.findOne.mockResolvedValue({});
-
-      await expect(service.saveFile(file, user)).rejects.toThrow(
-        ConflictException,
-      );
-      expect(userAvatarRepository.findOne).toHaveBeenCalledWith({ user });
-    });
-
-    it('should handle file save error', async () => {
-      const file: Express.Multer.File = {
-        originalname: 'avatar.png',
-        buffer: Buffer.from('file content'),
-      } as any;
-      const user = { _id: '6688082b24439dac4526ec15' } as unknown as User;
-
-      const filePath = join(
-        __dirname,
-        '..',
-        '..',
-        'uploads',
-        file.originalname,
+        'File deletion failed',
       );
 
-      mockUserAvatarRepository.findOne.mockResolvedValue(null);
-      jest.spyOn(fs, 'writeFileSync').mockImplementation(() => {
-        throw new Error('File save error');
-      });
-
-      await expect(service.saveFile(file, user)).rejects.toThrow(
-        'File save error',
-      );
-      expect(userAvatarRepository.findOne).toHaveBeenCalledWith({ user });
-      expect(fs.writeFileSync).toHaveBeenCalledWith(filePath, file.buffer);
+      expect(service.getUserAvatarOrThrow).toHaveBeenCalledWith(userId);
+      expect(fs.unlinkSync).toHaveBeenCalledWith(mockUserAvatar.filePath);
     });
   });
 });

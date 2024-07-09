@@ -28,7 +28,4 @@ export class CreateUserDTO {
   @IsEmail()
   @Transform(({ value }) => value?.toLowerCase())
   email: string;
-
-  @ApiProperty({ type: 'string', format: 'binary' })
-  avatar: any;
 }

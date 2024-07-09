@@ -3,32 +3,23 @@ import {
   Controller,
   Delete,
   Get,
+  HttpCode,
   HttpException,
   HttpStatus,
   Param,
   Post,
-  UploadedFile,
-  UseInterceptors,
 } from '@nestjs/common';
-import { FileInterceptor } from '@nestjs/platform-express';
-import { ApiConsumes, ApiTags } from '@nestjs/swagger';
 import { CreateUserDTO } from './dto/create-user.dto';
 import { UsersService } from './users.service';
 
 @Controller('api/user')
-@ApiTags('User')
 export class UsersController {
   constructor(private readonly usersService: UsersService) {}
 
-  @ApiConsumes('multipart/form-data')
+  @HttpCode(201)
   @Post('/')
-  @UseInterceptors(FileInterceptor('avatar'))
-  async createUser(
-    @Body() createUserDTO: CreateUserDTO,
-    @UploadedFile() avatar: Express.Multer.File,
-  ) {
+  async createUser(@Body() createUserDTO: CreateUserDTO) {
     try {
-      createUserDTO.avatar = avatar;
       const response = await this.usersService.createUser({
         ...createUserDTO,
       });
@@ -72,7 +63,7 @@ export class UsersController {
   async deleteUserAvatar(@Param('userId') userId: string) {
     try {
       const response = await this.usersService.deleteUserAvatar(userId);
-      return { message: 'User created', response };
+      return { message: 'User avatar deleted', response };
     } catch (error) {
       throw new HttpException(
         error?.message || 'Operation failed',

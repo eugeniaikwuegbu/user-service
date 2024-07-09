@@ -1,14 +1,15 @@
 import {
   ConflictException,
+  HttpException,
+  HttpStatus,
   Injectable,
-  NotFoundException,
 } from '@nestjs/common';
-import { NotificationService } from '../../modules/notifications/notification.service';
+import { NotificationService } from '../notifications/notification.service';
 import { UserAvatar } from '../user-avatar/entities/user-avatar.entity';
 import { UserAvatarService } from '../user-avatar/user-avatar.service';
 import { CreateUserDTO } from './dto/create-user.dto';
-import { User, UserDocument } from './entities/user.entity';
 import { UserRepository } from './repository/user.repository';
+import RequestUtil from '../../utils/request.util';
 
 @Injectable()
 export class UsersService {
@@ -21,39 +22,32 @@ export class UsersService {
   async createUser(createUserDTO: CreateUserDTO) {
     await this.throwIfUserExists(createUserDTO);
 
-    const newUser = await this.userRepository.create({ ...createUserDTO });
-
-    // upload avatar to fs
-    const savedFile = await this.userAvatarService.saveFile(
-      createUserDTO?.avatar,
-      newUser,
-    );
+    const user = await this.userRepository.create({ ...createUserDTO });
 
     await this.notificationService.sendWelcomeEmail(
-      newUser?.email,
-      `${newUser.firstName} ${newUser.lastName}`,
+      user?.email,
+      `${user.firstName} ${user.lastName}`,
     );
 
-    return { user: newUser, avatar: savedFile.base64 };
+    return { user };
   }
 
-  async getUserById(userId: string): Promise<User> {
-    return await this.getUserOrThrow(userId);
+  async getUserById(userId: string) {
+    const response = await RequestUtil.makeGetRequest(
+      `https://reqres.in/api/users/${userId}`,
+    );
+    if (response.status === HttpStatus.OK) {
+      return response.data.data;
+    } else {
+      throw new HttpException('Error fetching user', HttpStatus.BAD_REQUEST);
+    }
   }
 
-  async deleteUserAvatar(
-    userId: string,
-  ): Promise<{ user: User; userAvatar: UserAvatar }> {
-    const user = await this.getUserOrThrow(userId);
-    const userAvatar = await this.userAvatarService.deleteUserAvatar(userId);
-
-    return {
-      user,
-      userAvatar,
-    };
+  async deleteUserAvatar(userId: string): Promise<UserAvatar> {
+    return await this.userAvatarService.deleteUserAvatar(userId);
   }
 
-  async getUserAvatar(userId: string): Promise<{ fileBase64: string }> {
+  async getUserAvatar(userId: string): Promise<string> {
     return await this.userAvatarService.getUserAvatar(userId);
   }
 
@@ -63,15 +57,7 @@ export class UsersService {
     });
 
     if (userExists) {
-      throw new ConflictException('Account already exists.');
+      throw new ConflictException(`User with email already exists.`);
     }
-  }
-
-  private async getUserOrThrow(userId: string) {
-    const user: UserDocument = await this.userRepository.findById(userId);
-    if (!user) {
-      throw new NotFoundException('User does not exist');
-    }
-    return user;
   }
 }

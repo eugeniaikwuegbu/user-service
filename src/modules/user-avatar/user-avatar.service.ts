@@ -1,20 +1,20 @@
 import {
-  ConflictException,
+  HttpException,
+  HttpStatus,
   Injectable,
   NotFoundException,
 } from '@nestjs/common';
 import * as fs from 'fs';
 import * as path from 'path';
 import { join } from 'path';
-import SecurityUtil from '../../utils/security.util';
-import { User } from '../users/entities/user.entity';
 import { UserAvatar } from './entities/user-avatar.entity';
 import { UserAvatarRepository } from './repository/user-avatar.repository';
-// const uploads = require('../../../uploads');
+import RequestUtil from '../../utils/request.util';
+import SecurityUtil from '../../utils/security.util';
 
 @Injectable()
 export class UserAvatarService {
-  private readonly uploadPath = path.join(__dirname, '..', '..', 'uploads');
+  private readonly uploadPath = path.join(__dirname, '..', '..', 'avatars');
 
   constructor(private readonly userAvatarRepository: UserAvatarRepository) {
     if (!fs.existsSync(this.uploadPath)) {
@@ -22,69 +22,80 @@ export class UserAvatarService {
     }
   }
 
-  async getUserAvatar(userId: string): Promise<{ fileBase64: string }> {
-    const file = await this.getUserAvatarOrThrow(userId);
-    return { fileBase64: file.fileBase64 };
-  }
+  async getUserAvatar(userId: string): Promise<string> {
+    const avatar = await this.userAvatarRepository.findOne({ userId });
+    let fileBase64: string;
 
-  async saveFile(
-    file: Express.Multer.File,
-    user: User,
-  ): Promise<{ base64: string }> {
-    // check if user has uploaded avatar before
-    const userAvatar = await this.userAvatarRepository.findOne({
-      user,
-    });
-
-    if (userAvatar) {
-      throw new ConflictException('User avatar already exist');
+    if (avatar) {
+      fileBase64 = avatar.fileBase64;
+      return fileBase64;
     }
 
-    const filePath = join(__dirname, '..', '..', 'uploads', file.originalname);
-    file.path = filePath;
+    const avatarUrl = `https://reqres.in/img/faces/${userId}-image.jpg`;
+    const imageBuffer = await this.fetchImage(avatarUrl);
+    const hash = this.computeHash();
+    const filePath = await this.saveImageToFileSystem(userId, imageBuffer);
 
-    // Save file to the server
-    await fs.writeFileSync(filePath, file.buffer);
+    fileBase64 = imageBuffer.toString('base64');
 
-    // Generate hash
-    const hash = SecurityUtil.randomInt(15).toString();
-
-    // Convert file to base64
-    const base64 = SecurityUtil.toBase64(JSON.stringify(file));
-
-    // Create a new file document
     await this.userAvatarRepository.create({
-      user,
-      file,
+      userId,
       hash,
-      fileBase64: base64,
+      filePath,
+      fileBase64,
     });
 
-    return { base64 };
+    return fileBase64;
   }
 
-  async deleteUserAvatar(userId): Promise<UserAvatar> {
+  async deleteUserAvatar(userId: string): Promise<UserAvatar> {
     const userAvatar = await this.getUserAvatarOrThrow(userId);
 
-    // delete file in server
-    await fs.unlinkSync(userAvatar?.file?.path);
+    // delete file from file system
+    fs.unlinkSync(userAvatar?.filePath);
 
-    // delete entry in db
-    const deletedAvatar: UserAvatar =
-      await this.userAvatarRepository.findOneAndDelete({
-        user: userId,
-      });
-
-    return deletedAvatar;
+    // delete entry from db
+    return await this.userAvatarRepository.findOneAndDelete({
+      userId: userId,
+    });
   }
 
-  private async getUserAvatarOrThrow(userId): Promise<UserAvatar> {
+  async getUserAvatarOrThrow(userId: string): Promise<UserAvatar> {
     const userAvatar = await this.userAvatarRepository.findOne({
-      user: userId,
+      userId: userId,
     });
     if (!userAvatar) {
       throw new NotFoundException('User Avatar not found');
     }
     return userAvatar;
+  }
+
+  private computeHash(): string {
+    return SecurityUtil.randomInt(15).toString();
+  }
+
+  private async saveImageToFileSystem(
+    userId: string,
+    imageBuffer: Buffer,
+  ): Promise<string> {
+    const filePath = join(__dirname, '..', '..', 'avatars', `${userId}.png`);
+
+    fs.writeFileSync(filePath, imageBuffer);
+    return filePath;
+  }
+
+  private async fetchImage(url: string): Promise<Buffer> {
+    try {
+      const response = await RequestUtil.makeGetRequest(url, {
+        responseType: 'arraybuffer',
+      });
+
+      return Buffer.from(response.data, 'binary');
+    } catch (error) {
+      throw new HttpException(
+        error.messsage || 'Failed to fetch image',
+        HttpStatus.BAD_GATEWAY,
+      );
+    }
   }
 }
