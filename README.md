@@ -3,6 +3,7 @@
 </p>
 
 [circleci-image]: https://img.shields.io/circleci/build/github/nestjs/nest/master?token=abc123def456
+
 [circleci-url]: https://circleci.com/gh/nestjs/nest
 
   <p align="center">A progressive <a href="http://nodejs.org" target="_blank">Node.js</a> framework for building efficient and scalable server-side applications.</p>
@@ -21,11 +22,14 @@
 </p>
 
 ## Description
-This is a User Service App that lets a user sign up and upload avatar. A User gets a welcome email upon successful sign up
+
+This is a User Service App that lets a user sign up and upload avatar. A User gets a welcome email upon successful sign
+up
 
 NB: In order to receive the email, please enter a valid email address
 
 ## Repository
+
 https://github.com/eugeniaikwuegbu/user-service
 
 ## Installation
@@ -61,14 +65,16 @@ $ npm run test:cov
 ```
 
 ## Sample ENV
+
 Sample env values are in the `.env.sample` file
 
 ## Live Base Url
-https://user-service1-1f3a6f507c56.herokuapp.com/
+
+https://user-service1-afb44ace6c8e.herokuapp.com/
 
 ## Swagger Documentation
 
-https://user-service1-1f3a6f507c56.herokuapp.com/users-service/docs
+https://user-service1-afb44ace6c8e.herokuapp.com/users-service/docs
 
 ## Stay in touch
 
