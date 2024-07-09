@@ -23,8 +23,7 @@
 
 ## Description
 
-This is a User Service App that lets a user sign up and upload avatar. A User gets a welcome email upon successful sign
-up
+This is a User Service App that lets a user sign up with basic details. A User gets a welcome email upon successful signup
 
 NB: In order to receive the email, please enter a valid email address
 
