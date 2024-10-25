@@ -1,4 +1,5 @@
 import { Module } from '@nestjs/common';
+import { EventEmitterModule } from '@nestjs/event-emitter';
 import { DatabaseModule } from '../../configurations/database';
 import { LoggerModule } from '../../logger/logger.module';
 import NotificationMicroService from '../../microservices/notification';
@@ -14,7 +15,7 @@ import { UsersService } from './users.service';
 @Module({
   imports: [
     DatabaseModule,
-    LoggerModule,
+    LoggerModule, EventEmitterModule.forRoot(),
     DatabaseModule.forFeature([
       UserSchemaDefinition,
       UserAvatarSchemaDefinition,

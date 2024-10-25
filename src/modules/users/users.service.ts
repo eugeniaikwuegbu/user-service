@@ -4,12 +4,14 @@ import {
   HttpStatus,
   Injectable,
 } from '@nestjs/common';
+import { EventEmitter2 } from '@nestjs/event-emitter';
+import { Observable } from 'rxjs';
+import RequestUtil from '../../utils/request.util';
 import { NotificationService } from '../notifications/notification.service';
 import { UserAvatar } from '../user-avatar/entities/user-avatar.entity';
 import { UserAvatarService } from '../user-avatar/user-avatar.service';
 import { CreateUserDTO } from './dto/create-user.dto';
 import { UserRepository } from './repository/user.repository';
-import RequestUtil from '../../utils/request.util';
 
 @Injectable()
 export class UsersService {
@@ -17,6 +19,7 @@ export class UsersService {
     private readonly userRepository: UserRepository,
     private readonly userAvatarService: UserAvatarService,
     private readonly notificationService: NotificationService,
+    private eventEmitter: EventEmitter2,
   ) {}
 
   async createUser(createUserDTO: CreateUserDTO) {
@@ -59,5 +62,32 @@ export class UsersService {
     if (userExists) {
       throw new ConflictException(`User with email already exists.`);
     }
+  }
+
+  createPost(num: number) {
+    const data = {
+      id: num,
+      title: 'Understanding Next.js',
+      excerpt: 'Learn the basics of Next.js in this introductory article.',
+    };
+    this.eventEmitter.emit('blogCreated', data);
+
+    return data;
+  }
+
+  getMessageStream(): Observable<{
+    id: number;
+    title: string;
+    excerpt: string;
+  }> {
+    return new Observable((subscriber) => {
+      const listener = (message: {
+        id: number;
+        title: string;
+        excerpt: string;
+      }) => subscriber.next(message);
+      this.eventEmitter.on('blogCreated', listener);
+      return () => this.eventEmitter.off('blogCreated', listener);
+    });
   }
 }

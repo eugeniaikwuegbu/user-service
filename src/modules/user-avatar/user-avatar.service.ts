@@ -7,10 +7,10 @@ import {
 import * as fs from 'fs';
 import * as path from 'path';
 import { join } from 'path';
-import { UserAvatar } from './entities/user-avatar.entity';
-import { UserAvatarRepository } from './repository/user-avatar.repository';
 import RequestUtil from '../../utils/request.util';
 import SecurityUtil from '../../utils/security.util';
+import { UserAvatar } from './entities/user-avatar.entity';
+import { UserAvatarRepository } from './repository/user-avatar.repository';
 
 @Injectable()
 export class UserAvatarService {
@@ -93,7 +93,7 @@ export class UserAvatarService {
       return Buffer.from(response.data, 'binary');
     } catch (error) {
       throw new HttpException(
-        error.messsage || 'Failed to fetch image',
+        error.message || 'Failed to fetch image',
         HttpStatus.BAD_GATEWAY,
       );
     }

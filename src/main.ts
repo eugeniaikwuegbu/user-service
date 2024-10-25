@@ -35,7 +35,7 @@ async function bootstrap() {
   app.enableCors({
     origin: '*', // Allow all origins (not recommended for production)
     methods: 'GET,HEAD,PUT,PATCH,POST,DELETE,OPTIONS',
-    allowedHeaders: 'Content-Type, Accept',
+    allowedHeaders: 'Content-Type, Accept, Cache-Control, Connection',
   });
 
   useContainer(app.select(AppModule), { fallbackOnErrors: true });
@@ -56,6 +56,7 @@ async function bootstrap() {
       },
     }),
   );
+
   app.useGlobalInterceptors(new ResponseInterceptor());
 
   const configService = app.get(ConfigService);

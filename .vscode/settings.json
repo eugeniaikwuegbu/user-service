@@ -1,3 +1,9 @@
 {
-  "cSpell.words": ["fieldname", "pino", "randomstring", "Swagger"]
+  "cSpell.words": [
+    "fieldname",
+    "nestjs",
+    "pino",
+    "randomstring",
+    "Swagger"
+  ]
 }

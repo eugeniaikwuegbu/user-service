@@ -1,12 +1,12 @@
 import { Module } from '@nestjs/common';
 import { ConfigModule } from '@nestjs/config';
+import { MulterModule } from '@nestjs/platform-express';
 import * as Joi from 'joi';
+import { LoggerModule } from 'nestjs-pino';
 import { AppController } from './app.controller';
 import { AppService } from './app.service';
-import { LoggerModule } from 'nestjs-pino';
-import { UsersModule } from './modules/users/users.module';
 import { UserAvatarModule } from './modules/user-avatar/user-avatar.module';
-import { MulterModule } from '@nestjs/platform-express';
+import { UsersModule } from './modules/users/users.module';
 
 @Module({
   imports: [
